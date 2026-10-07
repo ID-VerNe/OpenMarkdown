@@ -410,10 +410,10 @@ function handleEditorInput() {
 
 function renderPreview(html) {
 	// CRITICAL: Sanitise output before injecting into DOM
-	var cleanHtml = DOMPurify.sanitize(html, {
+	var cleanHtml = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(html, {
 		ADD_TAGS: ['iframe', 'input'],
 		ADD_ATTR: ['allow', 'allowfullscreen', 'type', 'checked', 'disabled']
-	});
+	}) : html;
 	previewEl.innerHTML = cleanHtml;
 
 	// Post-process: find mermaid code blocks rendered by marked as
@@ -552,7 +552,95 @@ function renderPreview(html) {
 			}
 		}
 	}
+
+	// Post-process: add copy buttons to code blocks
+	addCodeCopyButtons(previewEl);
 }
+
+// Copy code block helper: wraps <pre> and adds copy button
+function addCodeCopyButtons(container) {
+	if (!container) return;
+	var preEls = container.querySelectorAll('pre');
+	for (var pi = 0; pi < preEls.length; pi++) {
+		var pre = preEls[pi];
+		// Skip if inside mermaid container or already wrapped
+		if (pre.querySelector('.mermaid-container') || pre.closest('.mermaid-container')) continue;
+		var codeEl = pre.querySelector('code');
+		// Skip mermaid code blocks
+		if (codeEl && codeEl.classList.contains('language-mermaid')) continue;
+		if (pre.parentElement && pre.parentElement.classList.contains('code-block-wrapper')) continue;
+
+		var wrapper = document.createElement('div');
+		wrapper.className = 'code-block-wrapper';
+		pre.parentNode.insertBefore(wrapper, pre);
+		wrapper.appendChild(pre);
+
+		var copyBtn = document.createElement('button');
+		copyBtn.type = 'button';
+		copyBtn.className = 'copy-code-btn';
+		copyBtn.setAttribute('data-i18n-title', 'code_copy');
+		var copyText = typeof t === 'function' ? t('code_copy') : '复制';
+		copyBtn.setAttribute('aria-label', copyText);
+		copyBtn.setAttribute('title', copyText);
+		copyBtn.innerHTML = '<svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span class="copy-label" data-i18n="code_copy">' + copyText + '</span>';
+		wrapper.appendChild(copyBtn);
+	}
+}
+
+function fallbackCopyText(text, callback) {
+	var textArea = document.createElement('textarea');
+	textArea.value = text;
+	textArea.style.position = 'fixed';
+	textArea.style.top = '-9999px';
+	textArea.style.left = '-9999px';
+	textArea.setAttribute('readonly', '');
+	document.body.appendChild(textArea);
+	textArea.select();
+	try {
+		document.execCommand('copy');
+		if (callback) callback();
+	} catch (err) {
+		console.error('Fallback copy failed:', err);
+	}
+	document.body.removeChild(textArea);
+}
+
+// Global click delegation for code block copy buttons
+document.addEventListener('click', function(e) {
+	var btn = e.target.closest('.copy-code-btn');
+	if (!btn) return;
+	e.preventDefault();
+	e.stopPropagation();
+
+	var wrapper = btn.closest('.code-block-wrapper');
+	if (!wrapper) return;
+	var codeEl = wrapper.querySelector('pre code') || wrapper.querySelector('pre');
+	if (!codeEl) return;
+
+	var textToCopy = codeEl.textContent || '';
+	var onCopied = function() {
+		btn.classList.add('copied');
+		var labelEl = btn.querySelector('.copy-label');
+		var copiedText = typeof t === 'function' ? t('code_copied') : '已复制!';
+		if (labelEl) labelEl.textContent = copiedText;
+		btn.setAttribute('title', copiedText);
+
+		setTimeout(function() {
+			btn.classList.remove('copied');
+			var defaultText = typeof t === 'function' ? t('code_copy') : '复制';
+			if (labelEl) labelEl.textContent = defaultText;
+			btn.setAttribute('title', defaultText);
+		}, 1800);
+	};
+
+	if (navigator.clipboard && navigator.clipboard.writeText) {
+		navigator.clipboard.writeText(textToCopy).then(onCopied).catch(function() {
+			fallbackCopyText(textToCopy, onCopied);
+		});
+	} else {
+		fallbackCopyText(textToCopy, onCopied);
+	}
+});
 
 editorEl.addEventListener('input', handleEditorInput);
 
@@ -1179,10 +1267,10 @@ function exportToPdf() {
 	var result = marked.parse(markdownText);
 
 	function doPrintRender(html) {
-		previewEl.innerHTML = DOMPurify.sanitize(html, {
+		previewEl.innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(html, {
 			ADD_TAGS: ['input'],
 			ADD_ATTR: ['type', 'checked', 'disabled']
-		});
+		}) : html;
 
 		// Post-process Mermaid diagrams
 		var codeBlocks = previewEl.querySelectorAll('code.language-mermaid');
@@ -1910,11 +1998,11 @@ function renderWysiwygView() {
 			var result = marked.parse(block.raw);
 			if (result && typeof result.then === 'function') {
 				result.then(function(html) {
-					wrapper.innerHTML = DOMPurify.sanitize(html);
+					wrapper.innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(html) : html;
 					postProcessBlock(wrapper);
 				});
 			} else {
-				wrapper.innerHTML = DOMPurify.sanitize(result);
+				wrapper.innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(result) : result;
 				postProcessBlock(wrapper);
 			}
 
@@ -2036,6 +2124,9 @@ function postProcessBlock(wrapper) {
 			})(blockquotes[bq]);
 		}
 	} catch(e) {}
+
+	// Post-process: add copy buttons to code blocks in WYSIWYG block
+	addCodeCopyButtons(wrapper);
 }
 
 // Start editing a block: replace rendered HTML with a textarea

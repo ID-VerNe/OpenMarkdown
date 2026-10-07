@@ -211,6 +211,10 @@ var I18N_DICT = {
 		ctx_paragraph: 'Paragraph',
 		ctx_task_list: 'Task List',
 
+		// Code block
+		code_copy: 'Copy',
+		code_copied: 'Copied!',
+
 		// app.js dynamic strings
 		tab_untitled: 'Untitled {n}',
 		tab_document: 'Document {n}',
@@ -449,6 +453,10 @@ var I18N_DICT = {
 		ctx_format: '格式',
 		ctx_paragraph: '段落',
 		ctx_task_list: '任务列表',
+
+		// Code block
+		code_copy: '复制',
+		code_copied: '已复制!',
 
 		tab_untitled: '未命名 {n}',
 		tab_document: '文档 {n}',
